@@ -1,0 +1,58 @@
+name: Pyler Lint&Test&Right
+
+on:
+  push:
+    branches:
+      - "*"
+  pull_request:
+    branches: ["main", "develop"]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10"]
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        id: setup-python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Installing poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.4.2
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies with poetry
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction
+
+      - name: Analysing the code with pyright
+        run: |
+          source .venv/bin/activate
+          pyright $(git ls-files '*.py') --lib
+
+      - name: Analysing the code with pylint
+        run: |
+          source .venv/bin/activate
+          pylint $(git ls-files '*.py') --rcfile=.pylintrc
+
+      - name: Test with pytest
+        run: |
+          source .venv/bin/activate
+          pytest tests
